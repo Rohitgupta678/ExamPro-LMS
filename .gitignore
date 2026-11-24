@@ -1,0 +1,6 @@
+.venv/
+.venv31/
+.venv311/
+__pycache__/
+node_modules/
+.env
