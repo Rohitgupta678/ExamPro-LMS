@@ -186,6 +186,8 @@ app.post('/api/enroll', (req, res) => {
 //     });
 // });
 // Mark course as completed (Upsert approach so it never fails even if enrollment row is missing)
+// Mark course as completed (Upsert approach)
+// Mark course as completed (Upsert approach)
 app.post('/api/student/complete-course', (req, res) => {
     const { student_id, course_id } = req.body;
     
@@ -201,36 +203,63 @@ app.post('/api/student/complete-course', (req, res) => {
     
     db.query(query, [student_id, course_id], (err, result) => {
         if (err) {
-            console.error("MySQL Complete Course Error:", err);
-            return res.status(500).json({ error: err.message });
+            console.error("MySQL Error:", err);
+            return res.status(500).json({ message: "Database error", error: err.message });
         }
         res.json({ message: "Course completed successfully!" });
     });
 });
+// POST: Register a new user (Student or Teacher)
+app.post('/api/register', (req, res) => {
+    const { name, email, password, role } = req.body;
 
-const handleCompleteCourse = async () => {
-    console.log("Sending completion request for student:", studentId, "course:", id);
-    
-    try {
-      const res = await axios.post('http://localhost:5000/api/student/complete-course', {
-        student_id: parseInt(studentId),
-        course_id: parseInt(id)
-      });
-      
-      console.log("Response received:", res.data);
-      
-      if (res.status === 200) {
-        setIsCompleted(true);
-        alert("Course Completed! You can now take the exam.");
-        navigate('/student/dashboard');
-      }
-    } catch (err) {
-      console.error("Full completion error:", err);
-      alert(`Failed to complete course: ${err.response?.data?.error || err.message}`);
+    if (!name || !email || !password || !role) {
+        return res.status(400).json({ message: "All fields are required" });
     }
-  };
 
+    const tableName = role === 'teacher' ? 'teachers' : 'students';
 
+    // Check if email already exists
+    const checkQuery = `SELECT * FROM ${tableName} WHERE email = ?`;
+    db.query(checkQuery, [email], (err, results) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (results.length > 0) {
+            return res.status(400).json({ message: "Email already registered" });
+        }
+
+        // Insert new user
+        const insertQuery = `INSERT INTO ${tableName} (name, email, password) VALUES (?, ?, ?)`;
+        db.query(insertQuery, [name, email, password], (err, result) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.status(201).json({ message: "Registration successful", userId: result.insertId });
+        });
+    });
+});
+// POST: Login
+app.post('/api/login', (req, res) => {
+    const { email, password, role } = req.body;
+
+    const tableName = role === 'teacher' ? 'teachers' : 'students';
+
+    const query = `SELECT * FROM ${tableName} WHERE email = ? AND password = ?`;
+    db.query(query, [email, password], (err, results) => {
+        if (err) return res.status(500).json({ error: err.message });
+        
+        if (results.length === 0) {
+            return res.status(401).json({ message: "Invalid email or password" });
+        }
+
+        // Return user data (excluding password for security)
+        const user = results[0];
+        delete user.password;
+
+        res.json({ 
+            message: "Login successful",
+            user: user,
+            role: role
+        });
+    });
+});
 const PORT = 5000;
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
